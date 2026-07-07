@@ -12,6 +12,7 @@ import platform
 
 import time
 
+import fileManager
 
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -37,7 +38,7 @@ def stream_webcam(client_socket):
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
         data = buffer.tobytes()
 
-        message_size = struct.pack("L", len(data))
+        message_size = struct.pack("<Q>", len(data))
         try:
             client_socket.sendall(message_size + data)
         except Exception as e:
@@ -57,7 +58,7 @@ def take_screenshot(client_socket):
         _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         data = buffer.tobytes()
 
-        message_size = struct.pack("L", len(data))
+        message_size = struct.pack("<Q>", len(data))
         try:
             client_socket.sendall(message_size + data)
             print('Đã gửi ảnh chụp màn hình thành công!')
@@ -150,7 +151,7 @@ def share_screen(client_socket):
             _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
             data = buffer.tobytes()
             
-            message_size = struct.pack("L", len(data))
+            message_size = struct.pack("<Q>", len(data))
             try:
                 client_socket.sendall(message_size + data)
             except Exception as e:
@@ -161,37 +162,6 @@ def share_screen(client_socket):
             sleep_time = frame_duration - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
-
-
-def share_screen(client_socket):
-    print('Bắt đầu chia sẻ màn hình liên tục...')
-    fps_target = 24
-    frame_duration = 1.0 / fps_target
-
-    with mss.mss() as sct:
-        monitor = sct.monitors[1]
-
-        while True:
-            start_time = time.time()
-
-            screen_img = np.array(sct.grab(monitor))
-            frame = cv2.cvtColor(screen_img, cv2.COLOR_BGRA2BGR)
-
-            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-            data = buffer.tobytes()
-
-            message_size = struct.pack("L", len(data))
-            try:
-                client_socket.sendall(message_size + data)
-            except Exception as e:
-                print("Mất kết nối chia sẻ màn hình:", e)
-                break
-
-            elapsed = time.time() - start_time
-            sleep_time = frame_duration - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
 
 CLIENT_IP = get_local_ip()
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -222,4 +192,36 @@ while cmd != 'exit':
             restart()
         elif cmd == 'sleep':
             sleep()
+    elif cmd == 'list_files':
+        # 1. Lấy danh sách file và gửi chuỗi text về cho Server
+        data = fileManager.get_file_list()
+        send_data(client, data)
+
+    elif cmd.startswith('delete_file '):
+        # 2. Server sẽ gửi lệnh dạng: "delete_file ten_file.txt"
+        # Ta cắt chuỗi ra để lấy tên file
+        _, filename = cmd.split(' ', 1)
+        result = fileManager.delete_file(filename)
+        send_data(client, result)
+
+    elif cmd.startswith('download_file '):
+        _, filename = cmd.split(' ', 1)
+        file_info = fileManager.get_file_info_for_download(filename)
+        
+        if file_info is None:
+            # Gửi số 0 (chuẩn <Q> 8-bytes) để báo lỗi
+            error_size = struct.pack("<Q>", 0)
+            client.sendall(error_size)
+        else:
+            filepath, file_size = file_info
+            # 1. Báo cho Server biết dung lượng tổng (dùng chuẩn <Q> 8-bytes)
+            client.sendall(struct.pack("<Q>", file_size))
+            
+            # 2. Bắt đầu Chunking: Mở file và gửi từng lát 4KB
+            with open(filepath, 'rb') as f:
+                while True:
+                    chunk = f.read(4096) # Chỉ hút 4KB vào RAM
+                    if not chunk:
+                        break            # Hết file thì thoát vòng lặp
+                    client.sendall(chunk)
     cmd = client.recv(1024).decode('utf-8')
