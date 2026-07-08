@@ -167,9 +167,6 @@ try:
                     receive_key_logger(conn)
                 elif cmd == 'screen':
                     receive_screen(conn)
-                elif cmd == 'power:sleep':
-                    print("[*] Sent sleep command. Client is disconnecting to sleep...")
-                    break
 
                 elif cmd == 'list_files':
                     # Chờ nhận bản text danh sách file từ Client và in ra
