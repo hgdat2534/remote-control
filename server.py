@@ -88,7 +88,7 @@ def receive_screenshot(conn):
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     cv2.imshow('Remote Screenshot', frame)
-    print("👉 Đã hiển thị ảnh! Hãy click vào cửa sổ ảnh và bấm PHÍM BẤT KỲ để tiếp tục gõ lệnh.")
+    print("Đã hiển thị ảnh! Hãy click vào cửa sổ ảnh và bấm PHÍM BẤT KỲ để tiếp tục gõ lệnh.")
     cv2.waitKey(0)
     cv2.destroyWindow('Remote Screenshot')
 
